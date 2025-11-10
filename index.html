@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ลงเวลา (ทำความสะอาด)</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body{font-family:system-ui,'TH Sarabun New',sans-serif;padding:16px}
+    .card{max-width:560px;margin:0 auto;padding:16px;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,.06)}
+    .btn{display:inline-block;padding:10px 16px;border-radius:10px;border:1px solid #ddd;font-weight:600;text-decoration:none}
+    .primary{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
+    pre{white-space:pre-wrap;background:#f8fafc;border:1px solid #e5e7eb;padding:10px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>ลงเวลา (ทำความสะอาด)</h2>
+    <p>QR เดียว • ผูกกับบัญชี LINE • ตรวจ GPS และโซน</p>
+    <div id="status">กำลังเรียก liff.init…</div>
+    <div id="actions" style="margin-top:12px;display:none">
+      <a id="loginBtn" class="btn primary" href="#">ล็อกอินด้วย LINE</a>
+      <a id="openInLineBtn" class="btn" href="#">เปิดผ่าน LIFF URL</a>
+    </div>
+    <div id="main" style="display:none">
+      <p id="hello"></p>
+      <button id="btnIn"  class="btn primary">บันทึกเข้างาน</button>
+      <button id="btnOut" class="btn">บันทึกออกงาน</button>
+    </div>
+    <pre id="log" style="margin-top:12px"></pre>
+  </div>
+
+<script>
+const LIFF_ID = "2008455173-vPVj00OY";                           // <= ของคุณ
+const API = "YOUR_GAS_API_URL";                                   // <= /exec ของ Apps Script (ใช้เป็น API)
+
+const log = (...a)=>{ const el=document.getElementById('log'); el.textContent += a.join(' ')+"\n" }
+const setStatus = t=>document.getElementById('status').textContent=t;
+
+(async () => {
+  try {
+    setStatus("เริ่ม liff.init…");
+    await liff.init({ liffId: LIFF_ID });
+    log("liff.init OK");
+
+    // เปิดปุ่ม "เปิดผ่าน LIFF URL" เผื่อผู้ใช้เปิดผ่านเบราว์เซอร์ภายนอก
+    document.getElementById('actions').style.display = 'block';
+    document.getElementById('openInLineBtn').onclick = () => {
+      location.href = `https://liff.line.me/${LIFF_ID}`;
+    };
+
+    if (!liff.isLoggedIn()) {
+      setStatus("ยังไม่ Login");
+      document.getElementById('loginBtn').onclick = () => {
+        liff.login({ redirectUri: location.href });
+      };
+      return;
+    }
+
+    // เข้าสู่ระบบแล้ว
+    document.getElementById('loginBtn').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    setStatus("เข้าสู่ระบบแล้ว");
+
+    const profile = await liff.getProfile();
+    const uid = profile.userId;
+    document.getElementById('hello').textContent = `สวัสดี ${profile.displayName}`;
+
+    // ขอพิกัด
+    const geo = await new Promise((res, rej)=>{
+      navigator.geolocation.getCurrentPosition(p=>res(p), e=>rej(e), {enableHighAccuracy:true,timeout:15000});
+    });
+    const lat = geo.coords.latitude, lng = geo.coords.longitude, acc = geo.coords.accuracy;
+    log(`GPS lat=${lat}, lng=${lng}, acc=${acc}m`);
+
+    // ปุ่มเข้างาน / ออกงาน
+    document.getElementById('btnIn').onclick  = () => punch('IN',  uid, lat, lng, acc);
+    document.getElementById('btnOut').onclick = () => punch('OUT', uid, lat, lng, acc);
+
+  } catch (e) {
+    setStatus("เกิดข้อผิดพลาดใน liff.init");
+    log(e?.stack || e);
+  }
+})();
+
+async function punch(type, uid, lat, lng, acc){
+  try{
+    setStatus("กำลังบันทึก…");
+    const r = await fetch(API, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ action:"punch", type, uid, lat, lng, acc })
+    });
+    const data = await r.json();
+    setStatus(data.message || "สำเร็จ");
+    log(JSON.stringify(data, null, 2));
+  }catch(e){
+    setStatus("บันทึกล้มเหลว");
+    log(e?.stack || e);
+  }
+}
+</script>
+</body>
+</html>
