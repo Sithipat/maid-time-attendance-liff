@@ -1,115 +1,122 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ลงเวลา (ทำความสะอาด)</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
-    body{font-family:system-ui,'TH Sarabun New',sans-serif;padding:18px}
-    .card{max-width:520px;margin:0 auto;padding:18px;border:1px solid #eee;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.06)}
-    .btn{display:inline-block;padding:12px 16px;border-radius:10px;border:1px solid #e0e0e0;cursor:pointer}
-    .p{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;background:#f6f7f9;border-radius:10px;padding:12px}
-    .ok{background:#0a7;color:#fff;border-color:#0a7;margin-right:6px}
-    .ghost{background:#f3f7ff;border-color:#cfe1ff}
+    body{font-family:-apple-system,'TH Sarabun New',sans-serif;padding:16px}
+    .btn{display:inline-block;padding:12px 16px;border-radius:12px;border:1px solid #ddd;margin:6px 6px 0 0}
+    .p{white-space:pre-wrap;background:#f7f7f7;border:1px solid #eee;border-radius:10px;padding:12px}
+    .ok{background:#0a7; color:#fff; border-color:#0a7}
+    .err{background:#d33; color:#fff; border-color:#d33}
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>ลงเวลา (ทำความสะอาด)</h2>
-    <p>QR เดียว • ผูกกับบัญชี LINE • ตรวจ GPS และโซน</p>
+  <h2>ลงเวลา (ทำความสะอาด)</h2>
+  <p id="status">บันทึกลงเหลว</p>
 
-    <p id="status">กำลังเรียก liff.init...</p>
+  <button id="openInLine" class="btn">เปิดผ่าน LIFF URL</button>
+  <div id="hello" style="margin:10px 0;"></div>
 
-    <div id="ui" style="display:none">
-      <p id="hello"></p>
-      <button class="btn ok"    id="btnIn">บันทึกเข้าทำงาน</button>
-      <button class="btn ghost" id="btnOut">บันทึกออกงาน</button>
-      <p class="p" id="log"></p>
-    </div>
-  </div>
+  <button id="btnIn"  class="btn ok">บันทึกเข้างาน</button>
+  <button id="btnOut" class="btn">บันทึกออกงาน</button>
+
+  <div class="p" id="log"></div>
 
 <script>
-/* ---------- ตั้งค่าให้ถูกต้อง ---------- */
-/** วาง URL ของ Web App (ลงท้ายด้วย /exec) ตรงนี้ */
-const GAS_ENDPOINT = 'https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbxNAPuaH6bpxpiijwr1lVY3Tr-vJyvamflq0jxeOjZ3ntvnIi3Qy5MoIxA-mOiDdEIkvg/exec';
-/** วาง LIFF ID ของคุณ (เช่น 2008455173-vPVj00OY) */
-const LIFF_ID = '2008455173-vPVj00OY';
-/* ---------------------------------------- */
+(async () => {
+  const LOG = (x)=>{ document.getElementById('log').textContent += (x+'\n'); };
+  const show  = (id, html)=> document.getElementById(id).innerHTML = html;
 
-const $ = s => document.querySelector(s);
-const log = (...a)=>{$('#log').textContent += a.join(' ') + '\n'};
+  // !!! เปลี่ยนเป็น URL /exec ของคุณ แล้วอย่าเว้นบรรทัด !!!
+  const EXEC_URL = "https://script.google.com/macros/s/AKfycbxNAPuaH6bpxpiijwr1lVY3Tr-vJyvamflq0jxeOjZ3ntvnli3Qy5MolxA-mOiDdEIkvg/exec".trim();
 
-(async function boot(){
+  // 1) init LIFF
   try{
-    $('#status').textContent = 'เริ่ม liff.init...';
-    await liff.init({ liffId: LIFF_ID });
-    $('#status').textContent = 'liff.init OK';
-    if(!liff.isLoggedIn()){
-      $('#status').textContent = 'ยังไม่ Login → กำลังพาไปล็อกอิน...';
-      liff.login(); return;
-    }
-    const profile = await liff.getProfile();
-    $('#hello').textContent = `สวัสดี ${profile.displayName}`;
-    $('#ui').style.display = '';
-    $('#status').style.display = 'none';
-
-    const punch = async (type)=>{
-      try{
-        const pos = await getLocation();
-        log(`GPS lat=${pos.lat}, lng=${pos.lng}, acc=${pos.acc}m`);
-        // ป้องกัน URL ผิดรูปแบบ (throw ตัวนี้คือสาเหตุ SyntaxError ที่คุณเจอ)
-        if(!/^https:\/\/script\.google(?:usercontent)?\.com\/macros\/s\/.+\/exec$/.test(GAS_ENDPOINT)){
-          throw new Error('กรุณาใส่ Web App URL (/exec) ให้ถูกต้องในตัวแปร GAS_ENDPOINT');
-        }
-        const payload = {
-          action: 'punch',
-          punchType: type,         // IN | OUT
-          lat: pos.lat, lng: pos.lng, acc: pos.acc,
-          ua: navigator.userAgent,
-          lineId: profile.userId,
-          displayName: profile.displayName
-        };
-        const res = await fetch(GAS_ENDPOINT, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-        const json = await res.json();
-        if(json.ok){
-          alert(`บันทึกสำเร็จ: ${json.msg || ''}`);
-        }else{
-          throw new Error(json.msg || 'บันทึกล้มเหลว');
-        }
-      }catch(e){
-        log(e.toString());
-        alert('ส่งข้อมูลไม่สำเร็จ: ' + e.message);
-      }
-    };
-
-    $('#btnIn').onclick  = ()=> punch('IN');
-    $('#btnOut').onclick = ()=> punch('OUT');
-
-  }catch(err){
-    $('#status').textContent = 'เกิดข้อผิดพลาดตอน liff.init: ' + err.message;
-    log('ERROR', err.toString());
+    LOG('เริ่ม liff.init...');
+    await liff.init({ liffId: "2008455173-vPVj00OY" });
+    LOG('liff.init OK');
+  }catch(e){
+    LOG('liff.init error: ' + e);
   }
-})();
 
-function getLocation(){
-  return new Promise((resolve, reject)=>{
-    if(!navigator.geolocation){ return reject(new Error('อุปกรณ์ไม่รองรับ GPS')); }
-    navigator.geolocation.getCurrentPosition(
-      pos => resolve({
-        lat: +pos.coords.latitude.toFixed(10),
-        lng: +pos.coords.longitude.toFixed(10),
-        acc: Math.round(pos.coords.accuracy || 0)
-      }),
-      err => reject(new Error('เปิดตำแหน่งที่ตั้งก่อนจ้า ('+err.message+')')),
-      {enableHighAccuracy:true, timeout:15000, maximumAge:0}
-    );
-  });
-}
+  // 2) login (ถ้าไม่ login)
+  if(!liff.isLoggedIn()){
+    show('status','ยังไม่ Login');
+  }else{
+    const prof = await liff.getProfile();
+    show('hello', 'สวัสดี ' + prof.displayName);
+  }
+
+  // 3) utility ขอพิกัด
+  async function getGPS(){
+    return new Promise((resolve,reject)=>{
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          acc: pos.coords.accuracy
+        }),
+        err => reject(err),
+        { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+      );
+    });
+  }
+
+  // 4) ส่ง POST ไปที่ Apps Script (ไม่ใช้ new URL)
+  async function punch(type){
+    try{
+      const prof = await liff.getProfile();
+      const uid  = prof.userId;
+      const name = prof.displayName;
+      const gps  = await getGPS();
+
+      LOG(`GPS lat=${gps.lat}, lng=${gps.lng}, acc=${gps.acc}m`);
+
+      const payload = {
+        action: 'punch',
+        type,                // 'IN' | 'OUT'
+        uid,
+        name,
+        gps
+      };
+
+      const res = await fetch(EXEC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        // ไม่ต้องตั้ง mode/no-cors เพื่อให้สามารถอ่าน JSON กลับมาได้
+        redirect: 'follow',
+        credentials: 'omit'
+      });
+
+      // ถ้า Apps Script ตอบ JSON กลับมา
+      const data = await res.json();
+      if(data.ok){
+        show('status', (type==='IN'?'บันทึกเข้าเรียบร้อย':'บันทึกออกเรียบร้อย'));
+        LOG(JSON.stringify(data));
+      }else{
+        show('status', 'บันทึกล้มเหลว');
+        LOG('Server not ok: ' + JSON.stringify(data));
+      }
+    }catch(e){
+      show('status','บันทึกล้มเหลว');
+      LOG('ERROR: ' + e);
+    }
+  }
+
+  document.getElementById('btnIn').onclick  = ()=> punch('IN');
+  document.getElementById('btnOut').onclick = ()=> punch('OUT');
+
+  // ปุ่มเปิดด้วย LIFF URL (กันกรณีเปิดผ่าน browser ปกติ)
+  document.getElementById('openInLine').onclick = ()=>{
+    const liffUrl = "https://liff.line.me/2008455173-vPVj00OY";
+    window.location.href = liffUrl;
+  };
+
+})();
 </script>
 </body>
 </html>
